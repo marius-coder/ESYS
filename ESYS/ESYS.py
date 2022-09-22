@@ -6,7 +6,7 @@ import seaborn as sns
 import numpy as np
 
 
-data = pd.read_csv("Belgian consumption and production profiles.csv", skiprows= 3, encoding = "cp1252", header =None, sep=";", decimal=".")
+data = pd.read_csv("Belgian consumption and production profiles.csv", skiprows= 5, encoding = "cp1252", header =None, sep=";", decimal=".")
 columnsPools = pd.read_csv("Belgian consumption and production profiles.csv", encoding = "cp1252", sep=";", decimal=".").columns
 columnsProdCons = pd.read_csv("Belgian consumption and production profiles.csv", skiprows=1, encoding = "cp1252", sep=";", decimal=".").columns
 dataCleaned = pd.DataFrame()
@@ -28,7 +28,8 @@ minute = 0
 currentYear = 0
 currentMonth = 0
 currentDay = 0
-for index in range(2,len(dataCleaned)+2):
+dataCleaned = dataCleaned.reset_index()
+for index in range(len(dataCleaned)):
     if dataCleaned[' Year'][index] > currentYear:
         currentYear = dataCleaned[' Year'][index]
         currentMonth = 0
@@ -65,6 +66,13 @@ dataCleaned['Minute'] = minutes
 dataCleaned["DateTime"] = pd.to_datetime(dataCleaned[' Year']+"."+dataCleaned[' Month']+"."+dataCleaned[' Day']+" "+dataCleaned['Hour']+":"+dataCleaned['Minute'], format= '%Y.%m.%d %H:%M')
 dataCleaned = dataCleaned.set_index(dataCleaned["DateTime"])
 dataCleaned.to_csv("test.csv", sep=";", decimal=",")
+
+for i,row in enumerate(dataCleaned["Hour"]):
+    if int(dataCleaned.index[i].hour) != int(row):
+        print(f"Index: {dataCleaned.index[i].hour}")
+        print(f"Row: {row}")
+        raise ValueError(f"Bruh")
+
 dataCleaned = dataCleaned.drop([" Year"," Month"," Day","DateTime","Hour","Minute"], axis = 1)
 
 fig, ax = plt.subplots(figsize=(7,4))
