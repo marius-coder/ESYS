@@ -1,3 +1,4 @@
+# -*- coding: cp1252 -*-
 import pandas as pd
 
 
