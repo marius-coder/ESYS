@@ -4,13 +4,19 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>b017468c-775c-47be-8e9d-346548d1eddf</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>ESYS.py</StartupFile>
+    <StartupFile>Simulation.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
     <OutputPath>.</OutputPath>
     <Name>ESYS</Name>
     <RootNamespace>ESYS</RootNamespace>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+    <Environment>PYDEVD_WARN_SLOW_RESOLVE_TIMEOUT = 0.5</Environment>
+    <TestFramework>none</TestFramework>
+    <UnitTestPattern>test*.py</UnitTestPattern>
+    <UnitTestRootDirectory>.</UnitTestRootDirectory>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <DebugSymbols>true</DebugSymbols>
@@ -21,8 +27,11 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Simulation.py" />
+    <Compile Include="Batterie - Copy.py" />
     <Compile Include="ESYS.py" />
-    <Compile Include="module1.py" />
+    <Compile Include="profileInitializer.py" />
+    <Compile Include="Batterie.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in

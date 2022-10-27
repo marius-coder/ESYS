@@ -7,7 +7,7 @@ import seaborn as sns
 import numpy as np
 
 
-data = pd.read_csv("Belgian consumption and production profiles.csv", skiprows= 5, encoding = "cp1252", header =None, sep=";", decimal=".")
+data = pd.read_csv("Belgian consumption and production profiles.csv", skiprows= 5, encoding = "cp1252", header =None, sep=";", decimal=".", thousands=" ")
 columnsPools = pd.read_csv("Belgian consumption and production profiles.csv", encoding = "cp1252", sep=";", decimal=".").columns
 columnsProdCons = pd.read_csv("Belgian consumption and production profiles.csv", skiprows=1, encoding = "cp1252", sep=";", decimal=".").columns
 dataCleaned = pd.DataFrame()
