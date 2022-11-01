@@ -35,6 +35,10 @@ class Simulation():
         self.gridDemand = np.zeros(35036)
         self.gridFeedIn = np.zeros(35036)
 
+        self.selfConsumptionBeforeCom = np.zeros(35036)
+        self.selfConsumptionAfterCom = np.zeros(35036)
+
+
     def Simulate(self,verbose = False):
 
         for timestep in range(35036):
@@ -51,9 +55,6 @@ class Simulation():
                 print(f"residualDemandSum: {residualDemandSum}")
                 print(f"residualProductionSum: {residualProductionSum}")
                 print("----------------------------------------------------")
-
-            if timestep == 622:
-                print("")
 
             #Direktzuweisung für andere Gebäude
             SumEnergytoAllocate = min(abs(residualProductionSum),residualDemandSum)
@@ -92,8 +93,7 @@ class Simulation():
                 residualDemandSum = self.battery.Entladen(qtoTake= residualDemandSum, timestep= timestep)
                 #restliche Energie aus dem Netz beziehen
                 self.gridDemand[timestep] = residualDemandSum
-            if timestep == 622:
-                print("")
+
             self.battery.TestBattery(timestep= timestep)
             self.TestFlowsHourly(timestep= timestep)
 

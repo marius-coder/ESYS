@@ -78,6 +78,8 @@ class Profile():
 
         #Datatracking
         self.residualLoad = np.zeros(35036)
+        self.selfConsumptionBeforeCom = np.zeros(35036)
+        self.selfConsumptionAfterCom = np.zeros(35036)
    
 def CreateProfiles(startConditions):
     ret = []

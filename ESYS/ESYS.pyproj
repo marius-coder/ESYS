@@ -32,6 +32,7 @@
     <Compile Include="ESYS.py" />
     <Compile Include="profileInitializer.py" />
     <Compile Include="Batterie.py" />
+    <Compile Include="Wirtschaft.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
   <!-- Uncomment the CoreCompile target to enable the Build command in
