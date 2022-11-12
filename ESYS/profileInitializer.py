@@ -3,12 +3,13 @@
 from unicodedata import decimal
 import pandas as pd
 import numpy as np
-
+from Wirtschaft import Econ
 
 profileBases = ["A0","B0","C0","A1","A2","A3","B1","B2","B3","C1","C2","C3","D1","D2","D3","Sport"]
 
 class Initializer():
     def __init__(self, path) -> None:
+        
         self.data = pd.read_csv(path, sep= ";", decimal= ",")
         self.profiles = {}
 
@@ -67,7 +68,7 @@ class Initializer():
        
 
 profiles = Initializer("test.csv")
-class Profile():
+class Profile(Econ):
 
     def __init__(self, name):        
         self.name = name
@@ -78,8 +79,20 @@ class Profile():
 
         #Datatracking
         self.residualLoad = np.zeros(35036)
+
         self.selfConsumptionBeforeCom = np.zeros(35036)
+        self.gridDemandBeforeCom = np.zeros(35036)
+        self.gridFeedInBeforeCom = np.zeros(35036)
+
         self.selfConsumptionAfterCom = np.zeros(35036)
+        self.gridDemandAfterCom = np.zeros(35036)
+        self.gridFeedInAfterCom = np.zeros(35036)
+
+
+
+
+
+
    
 def CreateProfiles(startConditions):
     ret = []

@@ -29,6 +29,8 @@ class Econ():
 		return sum(gridDemand) * self.priceDemand
 
 	def CalcGridFeedIn(self, gridFeedIn):
+		if sum(gridFeedIn) < 0:
+			print("")
 		return sum(gridFeedIn) * self.priceFeedIn
 
 	def CalcEconFlows(self, profile, selfConsumption, demand, production, gridDemand, gridFeedIn):

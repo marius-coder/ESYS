@@ -33,7 +33,7 @@ class Batterie():
         else:
             #Wenn nein, g2g
             self.verlust = qtoTake * (1-self.effizienz) 
-            self.leistung = qtoTake 
+            self.leistung = qtoTake - self.verlust
 
         #Kontrolle der Leistung
         if self.leistung + self.verlust > self.kapazität:
@@ -47,14 +47,14 @@ class Batterie():
             self.leistung = (self.kapazität - self.minLadung) - self.verlust
 
         #Ausfuhren des Entladevorgangs
-        self.kapazität -= self.leistung + self.verlust
-        qtoTake -= self.leistung 
+        self.kapazität = self.kapazität - (self.leistung + self.verlust)
+        qtoTake -= self.leistung - self.verlust
 
         #Tracken der relevanten Daten
         self.entladeEnergie[timestep] = self.leistung
         self.verluste[timestep] = self.verlust
 
-        return qtoTake + self.verlust
+        return qtoTake
     
     def Laden(self, qtoLoad, timestep):
         """Ladet die Batterie mit einer gegebenen Ladung

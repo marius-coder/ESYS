@@ -6,14 +6,14 @@ from profileInitializer import CreateProfiles
 from Batterie import Batterie
 
 startConditions = {
-    "A0" : 5,
-    "B0" : 0,
-    "C0" : 3,
-    "A1" : 0,
-    "A2" : 0,
-    "A3" : 0,
-    "B1" : 0,
-    "B2" : 0,
+    "A0" : 16,
+    "B0" : 12,
+    "C0" : 7,
+    "A1" : 4,
+    "A2" : 6,
+    "A3" : 2,
+    "B1" : 2,
+    "B2" : 5,
     "B3" : 3,
     "C1" : 0,
     "C2" : 1,
@@ -44,7 +44,12 @@ class Simulation():
         for timestep in range(35036):
             for building in self.profiles:
                 #Residuallast der einzelnen Gebäude ermitteln
-                building.residualLoad[timestep] = (building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]) - building.production[timestep]
+                demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                building.residualLoad[timestep] = demand - building.production[timestep]
+                building.selfConsumptionBeforeCom[timestep] = min(demand, building.production[timestep]) #Eigenverbrauch vor E-Gemeinschaft
+                building.gridDemandBeforeCom[timestep] = demand - building.selfConsumptionBeforeCom[timestep] #Netzbezug vor E-Gemeinschaft
+                building.gridFeedInBeforeCom[timestep] = building.production[timestep] - building.selfConsumptionBeforeCom[timestep] #Netzeinspeisung vor E-Gemeinschaft
+
 
             #Summe der gesamten Residuallast der Gemeinschaft ermitteln
             residualDemandSum = sum([building.residualLoad[timestep] for building in self.profiles if building.residualLoad[timestep] > 0])
@@ -69,6 +74,10 @@ class Simulation():
                     allocatedEnergy = SumEnergytoAllocate / residualDemandSum * building.residualLoad[timestep]
                     building.residualLoad[timestep] -= allocatedEnergy
                     checkResidualProdSum += allocatedEnergy
+                    demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                    building.selfConsumptionAfterCom[timestep] = min(demand, (building.production[timestep]+allocatedEnergy)) #Eigenverbrauch vor E-Gemeinschaft
+                    building.gridDemandAfterCom[timestep] = demand - building.selfConsumptionAfterCom[timestep] #Netzbezug vor E-Gemeinschaft
+                    building.gridFeedInAfterCom[timestep] = building.production[timestep] - building.selfConsumptionAfterCom[timestep] #Netzeinspeisung vor E-Gemeinschaft
                     
 
                 #Kontrolle ob die gesamte Verfügbare Energie verteilt woren ist (Auf 6 Kommastellen)
@@ -79,7 +88,8 @@ class Simulation():
             #negative Residuallast updaten
             residualProductionSum += round(checkResidualProdSum,6)
             residualDemandSum -= round(checkResidualProdSum,6)
-
+            if timestep == 36:
+                print("")
             #Falls nach der direktzuweisung noch Energie übrig ist, wird der gemeinschaftsspeicher befüllt
             if residualProductionSum < 0:
                 residualProductionSum = abs(residualProductionSum)
@@ -94,9 +104,36 @@ class Simulation():
                 #restliche Energie aus dem Netz beziehen
                 self.gridDemand[timestep] = residualDemandSum
 
+            #self.battery.Entladen(qttoTake= 5, )
             self.battery.TestBattery(timestep= timestep)
             self.TestFlowsHourly(timestep= timestep)
 
+        for building in self.profiles:
+            building.SetAttributes(antEnergie= 0.32, antAbgabe= 0.34, antSteuer= 0.34, priceDemand= 0.3, priceFeedIn= 0.1)
+            building.gridCostsBeforeCom = building.CalcGridDemand(building.gridDemandBeforeCom)
+            building.gridCompFeedInBeforeCom = building.CalcGridFeedIn(building.gridFeedInBeforeCom)
+
+            building.gridCostsAfterCom = building.CalcGridDemand(building.gridDemandAfterCom)
+            building.gridCompFeedInAfterCom = building.CalcGridFeedIn(building.gridFeedInAfterCom)
+
+        costsBefore = 0
+        compBefore = 0
+        
+        costsAfter = 0
+        compAfter = 0
+        for building in self.profiles:
+            costsBefore += building.gridCostsBeforeCom
+            compBefore += building.gridCompFeedInBeforeCom
+            costsAfter += building.gridCostsAfterCom
+            compAfter += building.gridCompFeedInAfterCom
+
+        print(f"Costs before Energy Community: {costsBefore}")
+        print(f"Costs after Energy Community: {costsAfter}")
+        print(f"Difference: {costsBefore-costsAfter}")
+        print(f"Compensation before Energy Community: {compBefore}")
+        print(f"Compensation after Energy Community: {compAfter}")
+        print(f"Difference: {compAfter-compBefore}")
+        print(f"Final Gain from Community: {(costsBefore-costsAfter)-(compAfter-compBefore)}")
 
 
         return 
@@ -153,6 +190,7 @@ class Simulation():
            raise ValueError(f"ENERGIEBILANZ STIMMT NICHT!: {Test} Zeitschritt: {timestep}")
 
 profileSim = CreateProfiles(startConditions)
+
 sim = Simulation(profileSim)
 
 sim.Simulate()
