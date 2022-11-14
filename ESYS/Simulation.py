@@ -6,24 +6,24 @@ from profileInitializer import CreateProfiles
 from Batterie import Batterie
 
 startConditions = {
-    "A0" : 16,
-    "B0" : 12,
-    "C0" : 7,
-    "A1" : 4,
-    "A2" : 6,
-    "A3" : 2,
-    "B1" : 2,
-    "B2" : 5,
-    "B3" : 3,
+    "A0" : 1,
+    "B0" : 0,
+    "C0" : 0,
+    "A1" : 0,
+    "A2" : 0,
+    "A3" : 0,
+    "B1" : 0,
+    "B2" : 0,
+    "B3" : 0,
     "C1" : 0,
-    "C2" : 1,
-    "C3" : 0,
-    "D1" : 5,
+    "C2" : 0,
+    "C3" : 1,
+    "D1" : 1,
     "D2" : 0,
     "D3" : 0,
     "Sport-30" : 0,
-    "Sport-100" : 10,
-    "Sport-200" : 10}
+    "Sport-100" : 0,
+    "Sport-200" : 0}
 
 
 
@@ -39,7 +39,7 @@ class Simulation():
         self.selfConsumptionAfterCom = np.zeros(35036)
 
 
-    def Simulate(self,verbose = False):
+    def Simulate(self, peerToPeer= False, sharedGeneration = False,verbose = False):
 
         for timestep in range(35036):
             for building in self.profiles:
@@ -48,7 +48,7 @@ class Simulation():
                 building.residualLoad[timestep] = demand - building.production[timestep]
                 building.selfConsumptionBeforeCom[timestep] = min(demand, building.production[timestep]) #Eigenverbrauch vor E-Gemeinschaft
                 building.gridDemandBeforeCom[timestep] = demand - building.selfConsumptionBeforeCom[timestep] #Netzbezug vor E-Gemeinschaft
-                building.gridFeedInBeforeCom[timestep] = building.production[timestep] - building.selfConsumptionBeforeCom[timestep] #Netzeinspeisung vor E-Gemeinschaft
+                building.gridFeedInBeforeCom[timestep] = abs(building.production[timestep] - building.selfConsumptionBeforeCom[timestep]) #Netzeinspeisung vor E-Gemeinschaft
 
 
             #Summe der gesamten Residuallast der Gemeinschaft ermitteln
@@ -65,31 +65,38 @@ class Simulation():
             SumEnergytoAllocate = min(abs(residualProductionSum),residualDemandSum)
             checkResidualProdSum = 0
             allocatedEnergy =  0
-            if residualProductionSum < 0: #Nur wenn Energie übrig ist
-                
-                for building in self.profiles:
-                    if building.residualLoad[timestep] < 0: #Wenn ResLast negativ ist dürfen wir die Residuallast nicht verändern
-                        continue
+            for building in self.profiles:
+                if building.residualLoad[timestep] > 0:
                     #Einspeisung dynamisch aufteilen
                     allocatedEnergy = SumEnergytoAllocate / residualDemandSum * building.residualLoad[timestep]
                     building.residualLoad[timestep] -= allocatedEnergy
                     checkResidualProdSum += allocatedEnergy
+                    #Daten loggen                
                     demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
-                    building.selfConsumptionAfterCom[timestep] = min(demand, (building.production[timestep]+allocatedEnergy)) #Eigenverbrauch vor E-Gemeinschaft
-                    building.gridDemandAfterCom[timestep] = demand - building.selfConsumptionAfterCom[timestep] #Netzbezug vor E-Gemeinschaft
-                    building.gridFeedInAfterCom[timestep] = building.production[timestep] - building.selfConsumptionAfterCom[timestep] #Netzeinspeisung vor E-Gemeinschaft
-                    
+                    building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep] #Eigenverbrauch nach E-Gemeinschaft
+                    building.gridDemandAfterCom[timestep] = demand - (building.selfConsumptionAfterCom[timestep] + allocatedEnergy) #Netzbezug nach E-Gemeinschaft
+                    building.gridFeedInAfterCom[timestep] = building.gridFeedInBeforeCom[timestep] #Netzeinspeisung nach E-Gemeinschaft   
+                
+                elif building.residualLoad[timestep] < 0:
+                    #Residuallast dynamisch aufteilen
+                    allocatedEnergy = abs(SumEnergytoAllocate / residualProductionSum * building.residualLoad[timestep])
+                    building.residualLoad[timestep] -= allocatedEnergy
+                    #checkResidualProdSum += allocatedEnergy
+                    #Daten loggen
+                    demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                    building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep]
+                    building.gridDemandAfterCom[timestep] = building.gridDemandBeforeCom[timestep]
+                    building.gridFeedInAfterCom[timestep] = abs(building.production[timestep] - building.selfConsumptionAfterCom[timestep]) - allocatedEnergy
 
-                #Kontrolle ob die gesamte Verfügbare Energie verteilt woren ist (Auf 6 Kommastellen)
-                if round(checkResidualProdSum,6) != round(min(abs(residualProductionSum),residualDemandSum),6):                
-                    raise ValueError(f"Allocated Energy must be 0. It is {allocatedEnergy - min(abs(residualProductionSum),residualDemandSum)}")
-                if round(residualDemandSum,6) < 0:
-                    raise ValueError(f"Demand Energy must be grater than 0. It is {round(residualDemandSum,6)}")
+            #Kontrolle ob die gesamte Verfügbare Energie verteilt woren ist (Auf 6 Kommastellen)
+            if round(checkResidualProdSum,6) != round(min(abs(residualProductionSum),residualDemandSum),6):                
+                raise ValueError(f"Allocated Energy must be 0. It is {allocatedEnergy - min(abs(residualProductionSum),residualDemandSum)}")
+            if round(residualDemandSum,6) < 0:
+                raise ValueError(f"Demand Energy must be grater than 0. It is {round(residualDemandSum,6)}")
             #negative Residuallast updaten
             residualProductionSum += round(checkResidualProdSum,6)
             residualDemandSum -= round(checkResidualProdSum,6)
-            if timestep == 36:
-                print("")
+
             #Falls nach der direktzuweisung noch Energie übrig ist, wird der gemeinschaftsspeicher befüllt
             if residualProductionSum < 0:
                 residualProductionSum = abs(residualProductionSum)
@@ -116,6 +123,12 @@ class Simulation():
             building.gridCostsAfterCom = building.CalcGridDemand(building.gridDemandAfterCom)
             building.gridCompFeedInAfterCom = building.CalcGridFeedIn(building.gridFeedInAfterCom)
 
+            print(f"Gebäude: {building.name}")
+            print(f"Gebäudebezug Davor: {sum(building.gridDemandBeforeCom)}")
+            print(f"Gebäudebezug Danach: {sum(building.gridDemandAfterCom)}")
+            print(f"Gebäudeeinspeisung Davor: {sum(building.gridFeedInBeforeCom)}")
+            print(f"Gebäudeeinspeisung Danach: {sum(building.gridFeedInAfterCom)}")
+
         costsBefore = 0
         compBefore = 0
         
@@ -127,13 +140,13 @@ class Simulation():
             costsAfter += building.gridCostsAfterCom
             compAfter += building.gridCompFeedInAfterCom
 
-        print(f"Costs before Energy Community: {costsBefore}")
-        print(f"Costs after Energy Community: {costsAfter}")
+        print(f"Costs for Griddemand before Energy Community: {costsBefore}")
+        print(f"Costs for Griddemand after Energy Community: {costsAfter}")
         print(f"Difference: {costsBefore-costsAfter}")
-        print(f"Compensation before Energy Community: {compBefore}")
-        print(f"Compensation after Energy Community: {compAfter}")
-        print(f"Difference: {compAfter-compBefore}")
-        print(f"Final Gain from Community: {(costsBefore-costsAfter)-(compAfter-compBefore)}")
+        print(f"Compensation for GridFeedin before Energy Community: {compBefore}")
+        print(f"Compensation for GridFeedin after Energy Community: {compAfter}")
+        print(f"Difference: {compBefore-compAfter}")
+        print(f"Final Gain from Community: {(costsBefore-costsAfter)-(compBefore-compAfter)}")
 
 
         return 
@@ -172,16 +185,9 @@ class Simulation():
             production += building.production[timestep]
 
         #Positive Energieflüsse von Außen (Netzbezug, Batterieentladung, PV-Produktion)
-        gridDemand = abs(self.gridDemand[timestep])
-        entladung = abs(self.battery.entladeEnergie[timestep])
-
         flowsIn = production + abs(self.gridDemand[timestep]) + abs(self.battery.entladeEnergie[timestep])
 
         #Negative Energieflüsse nach Außen
-        feedIn = abs(self.gridFeedIn[timestep])
-        ladung = abs(self.battery.ladeEnergie[timestep])
-        verluste = abs(self.battery.verluste[timestep])
-
         flowsOut = demand + abs(self.gridFeedIn[timestep]) + abs(self.battery.ladeEnergie[timestep]) + abs(self.battery.verluste[timestep])
 
         #Energieflüsse testen
