@@ -29,21 +29,40 @@ startConditions = {
 
 class Simulation():
 
-    def __init__(self, profiles) -> None:
+    def __init__(self, profiles, econParameters, sharedGenerationkWp = 0,peerToPeer= False, sharedGeneration= False, netMetering= False) -> None:
         self.profiles = profiles
         self.battery = Batterie(var_EntTiefe = 0.2, var_Effizienz = 0.95,var_kapMAX = 10000, infoAmount= 35036)
+
+        self.sharedGenerationkWp = sharedGenerationkWp
+        def interpolate(inp, fi):
+            i, f = int(fi // 1), fi % 1  # Split floating-point index into whole & fractional parts.
+            j = i+1 if f > 0 else i  # Avoid index error.
+            return (1-f) * inp[i] + f * inp[j]
+
+        inp = np.genfromtxt("PV_1kWp.csv")
+        new_len = 35036
+
+        delta = (len(inp)-1) / (new_len-1)
+        outp = [interpolate(inp, i*delta) for i in range(new_len)]
+        self.sharedGenerationProfile = [value * sharedGenerationkWp for value in outp]
+
         self.gridDemand = np.zeros(35036)
         self.gridFeedIn = np.zeros(35036)
+        self.peerToPeer = peerToPeer
+        self.sharedGeneration = sharedGeneration
+        self.netMetering = netMetering
+        self.econParameters = econParameters
 
         self.selfConsumptionBeforeCom = np.zeros(35036)
         self.selfConsumptionAfterCom = np.zeros(35036)
 
 
-    def Simulate(self, peerToPeer= False, sharedGeneration = False,verbose = False):
+    def Simulate(self,verbose = False):
 
         for timestep in range(35036):
             for building in self.profiles:
                 #Residuallast der einzelnen Gebäude ermitteln
+                building.production[timestep] += self.sharedGenerationProfile[timestep]/len(self.profiles) #Shared Generation hinzufügen zu Produktion. Hier wäre auch eine nicht Gleichmäßige Aufteilung zu machen
                 demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
                 building.residualLoad[timestep] = demand - building.production[timestep]
                 building.selfConsumptionBeforeCom[timestep] = min(demand, building.production[timestep]) #Eigenverbrauch vor E-Gemeinschaft
@@ -87,7 +106,8 @@ class Simulation():
                     building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep]
                     building.gridDemandAfterCom[timestep] = building.gridDemandBeforeCom[timestep]
                     building.gridFeedInAfterCom[timestep] = abs(building.production[timestep] - building.selfConsumptionAfterCom[timestep]) - allocatedEnergy
-
+            if timestep == 442:
+                print("")
             #Kontrolle ob die gesamte Verfügbare Energie verteilt woren ist (Auf 6 Kommastellen)
             if round(checkResidualProdSum,6) != round(min(abs(residualProductionSum),residualDemandSum),6):                
                 raise ValueError(f"Allocated Energy must be 0. It is {allocatedEnergy - min(abs(residualProductionSum),residualDemandSum)}")
@@ -116,38 +136,53 @@ class Simulation():
             self.TestFlowsHourly(timestep= timestep)
 
         for building in self.profiles:
-            building.SetAttributes(antEnergie= 0.32, antAbgabe= 0.34, antSteuer= 0.34, priceDemand= 0.3, priceFeedIn= 0.1)
-            building.gridCostsBeforeCom = building.CalcGridDemand(building.gridDemandBeforeCom)
-            building.gridCompFeedInBeforeCom = building.CalcGridFeedIn(building.gridFeedInBeforeCom)
+            building.SetAttributes(antEnergie= self.econParameters["antEnergie"], antAbgabe= self.econParameters["antAbgabe"]
+                                   , antSteuer= self.econParameters["antSteuer"], priceDemand= self.econParameters["priceDemand"], 
+                                   priceFeedIn= self.econParameters["priceFeedIn"])
+            building.gridCostsBeforeCom = building.CalcGridDemand(building.gridDemandBeforeCom, mode= "Normal")
+            building.gridCompFeedInBeforeCom = building.CalcGridFeedIn(building.gridFeedInBeforeCom, mode= "Normal")
 
-            building.gridCostsAfterCom = building.CalcGridDemand(building.gridDemandAfterCom)
-            building.gridCompFeedInAfterCom = building.CalcGridFeedIn(building.gridFeedInAfterCom)
+            building.gridCostsAfterCom = building.CalcGridDemand(gridDemand= building.gridDemandBeforeCom, mode= "EC", gridDemandEC= building.gridDemandAfterCom)
+            building.gridCompFeedInAfterCom = building.CalcGridFeedIn(gridFeedIn= building.gridFeedInBeforeCom, mode= "EC", gridFeedInEC= building.gridFeedInAfterCom)
 
-            print(f"Gebäude: {building.name}")
-            print(f"Gebäudebezug Davor: {sum(building.gridDemandBeforeCom)}")
-            print(f"Gebäudebezug Danach: {sum(building.gridDemandAfterCom)}")
-            print(f"Gebäudeeinspeisung Davor: {sum(building.gridFeedInBeforeCom)}")
-            print(f"Gebäudeeinspeisung Danach: {sum(building.gridFeedInAfterCom)}")
+            building.CalcNetMetering(gridDemand= building.gridDemandBeforeCom, gridFeedIn= building.gridFeedInBeforeCom)
+            if verbose == True:
+                print(f"Gebäude: {building.name}")
+                print(f"Gebäudebezug Davor: {sum(building.gridDemandBeforeCom)}")
+                print(f"Gebäudebezug Danach: {sum(building.gridDemandAfterCom)}")
+                print(f"Gebäudeeinspeisung Davor: {sum(building.gridFeedInBeforeCom)}")
+                print(f"Gebäudeeinspeisung Danach: {sum(building.gridFeedInAfterCom)}")
 
         costsBefore = 0
         compBefore = 0
         
         costsAfter = 0
         compAfter = 0
+        costsAfterNetMetering = 0
+        compAfterNetMetering = 0
+
+
         for building in self.profiles:
             costsBefore += building.gridCostsBeforeCom
             compBefore += building.gridCompFeedInBeforeCom
             costsAfter += building.gridCostsAfterCom
             compAfter += building.gridCompFeedInAfterCom
-
+            costsAfterNetMetering += building.gridCostsNetMetering
+            compAfterNetMetering += building.gridFeedInNetMetering
+        print(f"==================================================================")
+        print(f"======== Effects of Energy Community ============")
         print(f"Costs for Griddemand before Energy Community: {costsBefore}")
         print(f"Costs for Griddemand after Energy Community: {costsAfter}")
         print(f"Difference: {costsBefore-costsAfter}")
         print(f"Compensation for GridFeedin before Energy Community: {compBefore}")
         print(f"Compensation for GridFeedin after Energy Community: {compAfter}")
-        print(f"Difference: {compBefore-compAfter}")
-        print(f"Final Gain from Community: {(costsBefore-costsAfter)-(compBefore-compAfter)}")
-
+        print(f"Difference: {compAfter-compBefore}")
+        print(f"Final Gain from Community: {(costsBefore-costsAfter)+(compAfter-compBefore)}")
+        print(f"==================================================================")
+        print(f"======== Effects of Net Metering ============")
+        
+        print(f"Gridcosts with Net Metering: {costsAfterNetMetering}")
+        print(f"Compensation with Net Metering: {compAfterNetMetering}")
 
         return 
 
@@ -192,12 +227,22 @@ class Simulation():
 
         #Energieflüsse testen
         Test = flowsIn - flowsOut
-        if round(abs(Test),3) != 0:
+        if timestep == 442:
+            print("")
+
+        if round(abs(Test),1) != 0:
            raise ValueError(f"ENERGIEBILANZ STIMMT NICHT!: {Test} Zeitschritt: {timestep}")
 
 profileSim = CreateProfiles(startConditions)
 
-sim = Simulation(profileSim)
+econParameters = {
+    "antEnergie" : 0.6,
+    "antAbgabe" : 0.2,
+    "antSteuer" : 0.2,
+    "priceDemand" : 0.3,
+    "priceFeedIn" : 0.1,    
+    }
+sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 100)
 
 sim.Simulate()
 sim.TestFlows()

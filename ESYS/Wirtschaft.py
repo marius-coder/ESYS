@@ -28,11 +28,21 @@ class Econ():
 			self.priceFeedIn = priceFeedIn
 
 
-	def CalcGridDemand(self, gridDemand):
-		return sum(gridDemand) * self.priceDemand
+	def CalcGridDemand(self, gridDemand, mode, gridDemandEC=[]):
+		if mode == "Normal":
+			return sum(gridDemand) * self.priceDemand
+		if mode == "EC":
+			difference = sum(gridDemand) - sum(gridDemandEC)
+			return (sum(gridDemand)-difference) * self.priceDemand + difference * ((self.priceDemand + self.priceFeedIn)/2)
 
-	def CalcGridFeedIn(self, gridFeedIn):
-		return sum(gridFeedIn) * self.priceFeedIn
+	def CalcGridFeedIn(self, gridFeedIn, mode, gridFeedInEC=[]):
+		sumgridFeedIn = sum(gridFeedIn)
+		sumgridFeedInEC = sum(gridFeedInEC)
+		if mode == "Normal":
+			return sumgridFeedIn * self.priceFeedIn
+		if mode == "EC":
+			difference = sumgridFeedIn - sumgridFeedInEC
+			return (sumgridFeedIn-difference) * self.priceDemand + difference * ((self.priceDemand + self.priceFeedIn)/2)
 
 	def CalcEconFlows(self, profile, selfConsumption, demand, production, gridDemand, gridFeedIn):
 		"""Berechnet die monetären Flüsse. Diese Funktion geht von kWh aus"""
@@ -87,9 +97,14 @@ class Econ():
 			if gridFeedInMonthly > gridDemandMonthly:
 				residualFeedIn += (gridFeedInMonthly - difference) * self.priceFeedIn
 
-		gridDemandCosts = self.CalcGridDemand(gridDemand)
+		gridDemandCosts = self.CalcGridDemand(gridDemand, mode= "Normal") 
+		vergleichFeedIn = self.CalcGridFeedIn(gridFeedIn, mode= "Normal")
+
 
 		energycosts = gridDemandCosts - (netMeterFeedIn + residualFeedIn)
+
+		self.gridCostsNetMetering = gridDemandCosts
+		self.gridFeedInNetMetering = netMeterFeedIn + residualFeedIn
 
 		return energycosts
 
