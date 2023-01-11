@@ -251,7 +251,7 @@ econParameters = {
     "priceDemand" : 0.3,
     "priceFeedIn" : 0.1,    
     }
-sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 1000, peerToPeer= True)
+sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 100, peerToPeer= False)
 
 sim.Simulate()
 sim.TestFlows()

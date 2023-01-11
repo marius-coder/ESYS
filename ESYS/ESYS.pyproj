@@ -27,6 +27,7 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Simulation - Copy.py" />
     <Compile Include="Simulation.py" />
     <Compile Include="Batterie - Copy.py" />
     <Compile Include="ESYS.py" />
