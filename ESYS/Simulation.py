@@ -6,22 +6,22 @@ from profileInitializer import CreateProfiles
 from Batterie import Batterie
 
 startConditions = {
-    "A0" : 1,
+    "A0" : 10,
     "B0" : 0,
     "C0" : 0,
-    "A1" : 0,
+    "A1" : 1,
     "A2" : 0,
     "A3" : 0,
-    "B1" : 0,
+    "B1" : 1,
     "B2" : 0,
     "B3" : 0,
-    "C1" : 0,
+    "C1" : 1,
     "C2" : 0,
-    "C3" : 1,
-    "D1" : 1,
+    "C3" : 0,
+    "D1" : 0,
     "D2" : 0,
     "D3" : 0,
-    "Sport-30" : 0,
+    "Sport-30" : 1,
     "Sport-100" : 0,
     "Sport-200" : 0}
 
@@ -31,7 +31,7 @@ class Simulation():
 
     def __init__(self, profiles, econParameters, sharedGenerationkWp = 0,peerToPeer= False, sharedGeneration= False, netMetering= False) -> None:
         self.profiles = profiles
-        self.battery = Batterie(var_EntTiefe = 0.2, var_Effizienz = 0.95,var_kapMAX = 10000, infoAmount= 35036)
+        self.battery = Batterie(var_EntTiefe = 0.2, var_Effizienz = 0.95,var_kapMAX = 10, infoAmount= 35036)
 
         self.sharedGenerationkWp = sharedGenerationkWp
         def interpolate(inp, fi):
@@ -55,6 +55,7 @@ class Simulation():
 
         self.selfConsumptionBeforeCom = np.zeros(35036)
         self.selfConsumptionAfterCom = np.zeros(35036)
+        
 
 
     def CalcEEG(self, timestep, residualProductionSum, residualDemandSum, checkResidualProdSum):
@@ -86,6 +87,7 @@ class Simulation():
     def Simulate(self,verbose = False):
 
         for timestep in range(35036):
+
             for building in self.profiles:
                 #Residuallast der einzelnen Gebäude ermitteln
                 building.production[timestep] += self.sharedGenerationProfile[timestep]/len(self.profiles) #Shared Generation hinzufügen zu Produktion. Hier wäre auch eine nicht Gleichmäßige Aufteilung zu machen
@@ -95,11 +97,11 @@ class Simulation():
                 building.gridDemandBeforeCom[timestep] = demand - building.selfConsumptionBeforeCom[timestep] #Netzbezug vor E-Gemeinschaft
                 building.gridFeedInBeforeCom[timestep] = abs(building.production[timestep] - building.selfConsumptionBeforeCom[timestep]) #Netzeinspeisung vor E-Gemeinschaft
 
-
             #Summe der gesamten Residuallast der Gemeinschaft ermitteln
             residualDemandSum = sum([building.residualLoad[timestep] for building in self.profiles if building.residualLoad[timestep] > 0])
             residualProductionSum = sum([building.residualLoad[timestep] for building in self.profiles if building.residualLoad[timestep] < 0])
             print(f"Timestep: {timestep}")
+
             if verbose == True:
                 
                 print(f"residualDemandSum: {residualDemandSum}")
@@ -229,18 +231,48 @@ class Simulation():
             production += building.production[timestep]
 
         #Positive Energieflüsse von Außen (Netzbezug, Batterieentladung, PV-Produktion)
+        gridDem = abs(self.gridDemand[timestep])
+        batEntlade = abs(self.battery.entladeEnergie[timestep])
         flowsIn = production + abs(self.gridDemand[timestep]) + abs(self.battery.entladeEnergie[timestep])
 
         #Negative Energieflüsse nach Außen
+        gridFeed = abs(self.gridFeedIn[timestep])
+        batLade = abs(self.battery.ladeEnergie[timestep])
+        batVerl = abs(self.battery.verluste[timestep])
         flowsOut = demand + abs(self.gridFeedIn[timestep]) + abs(self.battery.ladeEnergie[timestep]) + abs(self.battery.verluste[timestep])
 
         #Energieflüsse testen
         Test = flowsIn - flowsOut
-        if timestep == 442:
-            print("")
-
         if round(abs(Test),1) != 0:
            raise ValueError(f"ENERGIEBILANZ STIMMT NICHT!: {Test} Zeitschritt: {timestep}")
+
+
+    def ExportResults(self):
+        investKosten = 0
+        ersparnisseProsumer = 0
+        ersparnisseConsumer = 0
+        Förderkosten = 0
+
+        kWhperkWp = 1000
+
+        for building in self.profiles:
+            investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+            print(sum(building.production))
+            if building.type == "Consumer":
+                ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom)
+            else:
+                ersparnisseProsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
+
+        Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+        investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
+        Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"] 
+        results = {
+            "Investkosten" : investKosten,
+            "Ersparnisse Prosumer" : ersparnisseProsumer,
+            "Ersparnisse Consumer" : ersparnisseConsumer,
+            "Förderkosten" : Förderkosten,
+            }
+        return results
 
 profileSim = CreateProfiles(startConditions)
 
@@ -250,11 +282,16 @@ econParameters = {
     "antSteuer" : 0.2,
     "priceDemand" : 0.3,
     "priceFeedIn" : 0.1,    
+    "Kosten Photovoltaik" : 1500,
+    "Kosten Stromspeicher" : 1300,
+    "Förderrate Photovoltaik" : 0.3,
+    "Förderrate Stromspeicher" : 0.2
     }
-sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 1000, peerToPeer= True)
+sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 0, peerToPeer= True)
 
 sim.Simulate()
 sim.TestFlows()
+print(sim.ExportResults())
 
 
 

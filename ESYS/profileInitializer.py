@@ -1,5 +1,6 @@
 # -*- coding: cp1252 -*-
 
+from copy import copy
 from unicodedata import decimal
 import pandas as pd
 import numpy as np
@@ -70,12 +71,17 @@ class Initializer():
 profiles = Initializer("test.csv")
 class Profile(Econ):
 
-    def __init__(self, name):        
+    def __init__(self, name):    
+        if any(substring in name for substring in ["A0","B0","C0"]):
+            self.type = "Consumer"
+        else:
+            self.type = "Prosumer"
         self.name = name
-        self.demand = profiles.profiles[name]["Demand"]
-        self.production = profiles.profiles[name]["Production"]
-        self.demandEV = profiles.profiles[name]["Electric Vehicle"]
-        self.demandHP = profiles.profiles[name]["Heatpump"]
+        
+        self.demand = copy(profiles.profiles[name]["Demand"])
+        self.production = copy(profiles.profiles[name]["Production"])
+        self.demandEV = copy(profiles.profiles[name]["Electric Vehicle"])
+        self.demandHP = copy(profiles.profiles[name]["Heatpump"])
 
         #Datatracking
         self.residualLoad = np.zeros(35036)
