@@ -1,6 +1,7 @@
 # -*- coding: cp1252 -*-
 
 import numpy as np
+import pandas as pd
 
 from profileInitializer import CreateProfiles
 from Batterie import Batterie
@@ -29,11 +30,14 @@ startConditions = {
 
 class Simulation():
 
-    def __init__(self, profiles, econParameters, sharedGenerationkWp = 0,peerToPeer= False, sharedGeneration= False, netMetering= False) -> None:
+    def __init__(self, profiles, econParameters, var_kapMAX, sharedGenerationkWp = 0,peerToPeer= False, sharedGeneration= False, netMetering= False) -> None:
         self.profiles = profiles
-        self.battery = Batterie(var_EntTiefe = 0.2, var_Effizienz = 0.95,var_kapMAX = 10, infoAmount= 35036)
+        self.battery = Batterie(var_EntTiefe = 0.2, var_Effizienz = 0.95,var_kapMAX = var_kapMAX, infoAmount= 35036)
 
-        self.sharedGenerationkWp = sharedGenerationkWp
+        if sharedGeneration == True:
+            self.sharedGenerationkWp = sharedGenerationkWp
+        else:
+            self.sharedGenerationkWp = 0
         def interpolate(inp, fi):
             i, f = int(fi // 1), fi % 1  # Split floating-point index into whole & fractional parts.
             j = i+1 if f > 0 else i  # Avoid index error.
@@ -87,7 +91,6 @@ class Simulation():
     def Simulate(self,verbose = False):
 
         for timestep in range(35036):
-
             for building in self.profiles:
                 #Residuallast der einzelnen Gebäude ermitteln
                 building.production[timestep] += self.sharedGenerationProfile[timestep]/len(self.profiles) #Shared Generation hinzufügen zu Produktion. Hier wäre auch eine nicht Gleichmäßige Aufteilung zu machen
@@ -247,7 +250,7 @@ class Simulation():
            raise ValueError(f"ENERGIEBILANZ STIMMT NICHT!: {Test} Zeitschritt: {timestep}")
 
 
-    def ExportResults(self):
+    def ExportResults(self, netMetering):
         investKosten = 0
         ersparnisseProsumer = 0
         ersparnisseConsumer = 0
@@ -258,11 +261,16 @@ class Simulation():
         for building in self.profiles:
             investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
             print(sum(building.production))
-            if building.type == "Consumer":
-                ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom)
+            if netMetering:
+                if building.type == "Consumer":
+                    ersparnisseConsumer += 0
+                else:
+                    ersparnisseProsumer += (building.gridCostsNetMetering + building.gridFeedInNetMetering)
             else:
-                ersparnisseProsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
-
+                if building.type == "Consumer":
+                    ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom)
+                else:
+                    ersparnisseProsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
         Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
         investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
         Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"] 
@@ -272,33 +280,60 @@ class Simulation():
             "Ersparnisse Consumer" : ersparnisseConsumer,
             "Förderkosten" : Förderkosten,
             }
+        
         return results
 
 profileSim = CreateProfiles(startConditions)
 
-econParameters = {
-    "antEnergie" : 0.6,
-    "antAbgabe" : 0.2,
-    "antSteuer" : 0.2,
-    "priceDemand" : 0.3,
-    "priceFeedIn" : 0.1,    
-    "Kosten Photovoltaik" : 1500,
-    "Kosten Stromspeicher" : 1300,
-    "Förderrate Photovoltaik" : 0.3,
-    "Förderrate Stromspeicher" : 0.2
+
+#sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 100, sharedGenerationkWp= 0, peerToPeer= True)
+
+#sim.Simulate()
+#sim.TestFlows()
+#print(sim.ExportResults())
+
+econParametersMain = {
+    "antEnergie" : [0.6, 0.6, 0.6],
+    "antAbgabe" : [0.2, 0.2, 0.2],
+    "antSteuer" : [0.2, 0.2, 0.2],
+    "priceDemand" : [0.135 , 0.4, 0.215],
+    "priceFeedIn" : [0.085, 0.286, 0.11],    
+    "Kosten Photovoltaik" : [1300, 1800, 1300],
+    "Kosten Stromspeicher" : [1000, 1500, 1300],
+    "Förderrate Photovoltaik" : [0.3, 0.3, 0.4],
+    "Förderrate Stromspeicher" : [0.2, 0.2, 0.3]
     }
-sim = Simulation(profileSim,econParameters= econParameters, sharedGenerationkWp= 0, peerToPeer= True)
 
-sim.Simulate()
-sim.TestFlows()
-print(sim.ExportResults())
-
-
-
+mainSzens = {
+    "netMetering" : [True, False, False],
+    "Peer-to-Peer" : [True, True, True],
+    "sharedGeneration" : [False, False, True],    
+    }
 
 
+data = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
 
-
+for szen in range(3):
+    for kostenSzen in range(3):        
+        econParameters = {
+            "antEnergie" : econParametersMain["antEnergie"][kostenSzen],
+            "antAbgabe" : econParametersMain["antAbgabe"][kostenSzen],
+            "antSteuer" : econParametersMain["antSteuer"][kostenSzen],
+            "priceDemand" : econParametersMain["priceDemand"][kostenSzen],
+            "priceFeedIn" : econParametersMain["priceFeedIn"][kostenSzen], 
+            "Kosten Photovoltaik" : econParametersMain["Kosten Photovoltaik"][kostenSzen],
+            "Kosten Stromspeicher" : econParametersMain["Kosten Stromspeicher"][kostenSzen],
+            "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
+            "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
+            }
+        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 100, sharedGenerationkWp= 100, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+        sim.Simulate()
+        results = sim.ExportResults(netMetering= mainSzens["netMetering"][szen])
+        data = data.append(results, ignore_index = True)
+#data.to_csv("Wirtschaftliche_Bewertung.csv", sep=";", decimal = ",", encoding= "cp1252")
+writer = pd.ExcelWriter("Wirtschaftliche_Bewertung.xlsx", engine='openpyxl')
+data.to_excel(writer, sheet_name= "Test", header= None,index=None,
+                     startcol= 2, startrow= 2)
 
 
 
