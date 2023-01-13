@@ -2,12 +2,12 @@
 
 import numpy as np
 import pandas as pd
-
+from tqdm import tqdm
 from profileInitializer import CreateProfiles
 from Batterie import Batterie
-
+from openpyxl import load_workbook 
 startConditions = {
-    "A0" : 10,
+    "A0" : 1,
     "B0" : 0,
     "C0" : 0,
     "A1" : 1,
@@ -103,7 +103,7 @@ class Simulation():
             #Summe der gesamten Residuallast der Gemeinschaft ermitteln
             residualDemandSum = sum([building.residualLoad[timestep] for building in self.profiles if building.residualLoad[timestep] > 0])
             residualProductionSum = sum([building.residualLoad[timestep] for building in self.profiles if building.residualLoad[timestep] < 0])
-            print(f"Timestep: {timestep}")
+            #print(f"Timestep: {timestep}")
 
             if verbose == True:
                 
@@ -250,7 +250,7 @@ class Simulation():
            raise ValueError(f"ENERGIEBILANZ STIMMT NICHT!: {Test} Zeitschritt: {timestep}")
 
 
-    def ExportResults(self, netMetering):
+    def ExportResults(self, typ):
         investKosten = 0
         ersparnisseProsumer = 0
         ersparnisseConsumer = 0
@@ -258,22 +258,49 @@ class Simulation():
 
         kWhperkWp = 1000
 
-        for building in self.profiles:
-            investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
-            print(sum(building.production))
-            if netMetering:
+        if typ == "Peer-to-Peer":
+            for building in self.profiles:
+                building.gridCostsBeforeCom = building.CalcGridDemand(building.gridDemandBeforeCom, mode= "Normal")
+                building.gridCompFeedInBeforeCom = building.CalcGridFeedIn(building.gridFeedInBeforeCom, mode= "Normal")
+
+                building.gridCostsAfterCom = building.CalcGridDemand(gridDemand= building.gridDemandBeforeCom, mode= "EC", gridDemandEC= building.gridDemandAfterCom)
+                building.gridCompFeedInAfterCom = building.CalcGridFeedIn(gridFeedIn= building.gridFeedInBeforeCom, mode= "EC", gridFeedInEC= building.gridFeedInAfterCom)
+                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+
+                if building.type == "Consumer":
+                    ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
+                else:
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.CalcGridDemand(building.gridDemandAfterCom, mode= "EC")
+                    ersparnisseProsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
+            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+            investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
+            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+
+        elif typ == "netMetering":
+            for building in self.profiles:
+                building.CalcNetMetering(gridDemand= building.gridDemandBeforeCom, gridFeedIn= building.gridFeedInBeforeCom)
+                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+
                 if building.type == "Consumer":
                     ersparnisseConsumer += 0
                 else:
-                    ersparnisseProsumer += (building.gridCostsNetMetering + building.gridFeedInNetMetering)
-            else:
+                    ersparnisseProsumer += building.gridCostsNetMetering + (building.gridFeedInNetMetering - building.gridCompFeedInBeforeCom)
+            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+            investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
+            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+        
+        elif typ == "sharedGeneration":
+            for building in self.profiles:
+                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+
                 if building.type == "Consumer":
                     ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom)
                 else:
                     ersparnisseProsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
-        Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
-        investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
-        Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"] 
+            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+            investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
+            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+            
         results = {
             "Investkosten" : investKosten,
             "Ersparnisse Prosumer" : ersparnisseProsumer,
@@ -285,7 +312,6 @@ class Simulation():
 
 profileSim = CreateProfiles(startConditions)
 
-
 #sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 100, sharedGenerationkWp= 0, peerToPeer= True)
 
 #sim.Simulate()
@@ -296,9 +322,9 @@ econParametersMain = {
     "antEnergie" : [0.6, 0.6, 0.6],
     "antAbgabe" : [0.2, 0.2, 0.2],
     "antSteuer" : [0.2, 0.2, 0.2],
-    "priceDemand" : [0.135 , 0.4, 0.215],
+    "priceDemand" : [0.17 , 0.6, 0.3],
     "priceFeedIn" : [0.085, 0.286, 0.11],    
-    "Kosten Photovoltaik" : [1300, 1800, 1300],
+    "Kosten Photovoltaik" : [1300, 1800, 1500],
     "Kosten Stromspeicher" : [1000, 1500, 1300],
     "Förderrate Photovoltaik" : [0.3, 0.3, 0.4],
     "Förderrate Stromspeicher" : [0.2, 0.2, 0.3]
@@ -313,7 +339,7 @@ mainSzens = {
 
 data = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
 
-for szen in range(3):
+for szen in tqdm(range(3)):
     for kostenSzen in range(3):        
         econParameters = {
             "antEnergie" : econParametersMain["antEnergie"][kostenSzen],
@@ -326,16 +352,23 @@ for szen in range(3):
             "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
             "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
             }
-        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 100, sharedGenerationkWp= 100, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+        profileSim = CreateProfiles(startConditions)
+        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 0, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
         sim.Simulate()
-        results = sim.ExportResults(netMetering= mainSzens["netMetering"][szen])
+        results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
         data = data.append(results, ignore_index = True)
 #data.to_csv("Wirtschaftliche_Bewertung.csv", sep=";", decimal = ",", encoding= "cp1252")
+
+
+book = load_workbook("Wirtschaftliche_Bewertung.xlsx")
 writer = pd.ExcelWriter("Wirtschaftliche_Bewertung.xlsx", engine='openpyxl')
-data.to_excel(writer, sheet_name= "Test", header= None,index=None,
-                     startcol= 2, startrow= 2)
 
-
+writer.book = book
+writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+data.to_excel(writer, sheet_name= "Wirtschaftliche_Bewertung", header= None,index=None,
+                     startcol= 2, startrow= 1)
+writer.save()
+writer.close()
 
 
 

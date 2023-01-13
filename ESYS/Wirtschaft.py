@@ -44,42 +44,6 @@ class Econ():
 			difference = sumgridFeedIn - sumgridFeedInEC
 			return (sumgridFeedIn-difference) * self.priceDemand + difference * ((self.priceDemand + self.priceFeedIn)/2)
 
-	def CalcEconFlows(self, profile, selfConsumption, demand, production, gridDemand, gridFeedIn):
-		"""Berechnet die monetären Flüsse. Diese Funktion geht von kWh aus"""
-
-		
-
-
-		pass
-
-
-	def GetMonth(self, timestep):
-		if 0 <= timestep <= 2976:
-			return 1
-		if 2976 <= timestep <= 5664:
-			return 2
-		if 5664 <= timestep <= 8640:
-			return 3
-		if 8640 <= timestep <= 11520:
-			return 4
-		if 11520 <= timestep <= 14496:
-			return 5
-		if 14496 <= timestep <= 17376:
-			return 6
-		if 17376 <= timestep <= 20352:
-			return 7
-		if 20352 <= timestep <= 23328:
-			return 8
-		if 23328 <= timestep <= 26208:
-			return 9
-		if 26208 <= timestep <= 29184:
-			return 10
-		if 29184 <= timestep <= 32064:
-			return 11
-		if 32064 <= timestep <= 35040:
-			return 12
-
-
     
 	def CalcNetMetering(self, gridDemand, gridFeedIn):
 
@@ -103,7 +67,7 @@ class Econ():
 
 		energycosts = gridDemandCosts - (netMeterFeedIn + residualFeedIn)
 
-		self.gridCostsNetMetering = gridDemandCosts
+		self.gridCostsNetMetering = self.CalcGridDemand(self.demand, mode= "Normal") - gridDemandCosts
 		self.gridFeedInNetMetering = netMeterFeedIn + residualFeedIn
 
 		return energycosts
