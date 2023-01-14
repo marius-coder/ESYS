@@ -7,24 +7,32 @@ from profileInitializer import CreateProfiles
 from Batterie import Batterie
 from openpyxl import load_workbook 
 startConditions = {
-    "A0" : 1,
-    "B0" : 0,
-    "C0" : 0,
-    "A1" : 1,
-    "A2" : 0,
+    "A0" : 16,
+    "B0" : 12,
+    "C0" : 7,
+    "A1" : 4,
+    "B1" : 6,
+    "C1" : 2,
+    "C1_EV" : 2,
+    "C1_HP" : 6,
+    "A2" : 2,
+    "B2" : 5,
+    "C2" : 3,
+    "C2_EV" : 3,
+    "C2_HP" : 7,
+    "D2_HP" : 0,
+    "D2" : 2,
+    "D2_EV" : 0,
     "A3" : 0,
-    "B1" : 1,
-    "B2" : 0,
-    "B3" : 0,
-    "C1" : 1,
-    "C2" : 0,
-    "C3" : 0,
-    "D1" : 0,
-    "D2" : 0,
+    "B3" : 3,
+    "C3" : 3,
+    "C3_EV" : 5,
+    "C3_HP" : 0,
+    "D3_HP" : 6,
     "D3" : 0,
-    "Sport-30" : 1,
-    "Sport-100" : 0,
-    "Sport-200" : 0}
+    "D3_EV" : 6}
+
+
 
 
 
@@ -71,9 +79,9 @@ class Simulation():
                 building.residualLoad[timestep] -= allocatedEnergy
                 checkResidualProdSum += allocatedEnergy
                 #Daten loggen                
-                demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
                 building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep] #Eigenverbrauch nach E-Gemeinschaft
-                building.gridDemandAfterCom[timestep] = demand - (building.selfConsumptionAfterCom[timestep] + allocatedEnergy) #Netzbezug nach E-Gemeinschaft
+                building.gridDemandAfterCom[timestep] = building.demand[timestep] - (building.selfConsumptionAfterCom[timestep] + allocatedEnergy) #Netzbezug nach E-Gemeinschaft
                 building.gridFeedInAfterCom[timestep] = building.gridFeedInBeforeCom[timestep] #Netzeinspeisung nach E-Gemeinschaft   
                 
             elif building.residualLoad[timestep] < 0:
@@ -82,7 +90,7 @@ class Simulation():
                 building.residualLoad[timestep] -= allocatedEnergy
                 #checkResidualProdSum += allocatedEnergy
                 #Daten loggen
-                demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
                 building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep]
                 building.gridDemandAfterCom[timestep] = building.gridDemandBeforeCom[timestep]
                 building.gridFeedInAfterCom[timestep] = abs(building.production[timestep] - building.selfConsumptionAfterCom[timestep]) - allocatedEnergy
@@ -93,11 +101,12 @@ class Simulation():
         for timestep in range(35036):
             for building in self.profiles:
                 #Residuallast der einzelnen Gebäude ermitteln
-                building.production[timestep] += self.sharedGenerationProfile[timestep]/len(self.profiles) #Shared Generation hinzufügen zu Produktion. Hier wäre auch eine nicht Gleichmäßige Aufteilung zu machen
-                demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
-                building.residualLoad[timestep] = demand - building.production[timestep]
-                building.selfConsumptionBeforeCom[timestep] = min(demand, building.production[timestep]) #Eigenverbrauch vor E-Gemeinschaft
-                building.gridDemandBeforeCom[timestep] = demand - building.selfConsumptionBeforeCom[timestep] #Netzbezug vor E-Gemeinschaft
+                if self.sharedGeneration:
+                    building.production[timestep] += self.sharedGenerationProfile[timestep]/len(self.profiles) #Shared Generation hinzufügen zu Produktion. Hier wäre auch eine nicht Gleichmäßige Aufteilung zu machen
+                #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+                building.residualLoad[timestep] = building.demand[timestep] - building.production[timestep]
+                building.selfConsumptionBeforeCom[timestep] = min(building.demand[timestep], building.production[timestep]) #Eigenverbrauch vor E-Gemeinschaft
+                building.gridDemandBeforeCom[timestep] = building.demand[timestep] - building.selfConsumptionBeforeCom[timestep] #Netzbezug vor E-Gemeinschaft
                 building.gridFeedInBeforeCom[timestep] = abs(building.production[timestep] - building.selfConsumptionBeforeCom[timestep]) #Netzeinspeisung vor E-Gemeinschaft
 
             #Summe der gesamten Residuallast der Gemeinschaft ermitteln
@@ -207,7 +216,7 @@ class Simulation():
         demand = 0
         production = 0
         for building in self.profiles:
-            demand += sum(building.demand) + sum(building.demandEV) + sum(building.demandHP)
+            demand += sum(building.demand)# + sum(building.demandEV) + sum(building.demandHP)
             production += sum(building.production)
 
         #Positive Energieflüsse von Außen (Netzbezug, Batterieentladung, PV-Produktion)
@@ -230,7 +239,7 @@ class Simulation():
         demand = 0
         production = 0
         for building in self.profiles:
-            demand += building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
+            demand += building.demand[timestep]# + building.demandEV[timestep] + building.demandHP[timestep]
             production += building.production[timestep]
 
         #Positive Energieflüsse von Außen (Netzbezug, Batterieentladung, PV-Produktion)
@@ -254,58 +263,84 @@ class Simulation():
         investKosten = 0
         ersparnisseProsumer = 0
         ersparnisseConsumer = 0
-        Förderkosten = 0
-
+        förderkosten = 0
         kWhperkWp = 1000
+
+        verbrauch = 0
+        erzeugung = 0
+        eigenverbrauch = 0
+        netzbezug = 0
+        netzeinspeisung = 0
 
         if typ == "Peer-to-Peer":
             for building in self.profiles:
-                building.gridCostsBeforeCom = building.CalcGridDemand(building.gridDemandBeforeCom, mode= "Normal")
-                building.gridCompFeedInBeforeCom = building.CalcGridFeedIn(building.gridFeedInBeforeCom, mode= "Normal")
-
-                building.gridCostsAfterCom = building.CalcGridDemand(gridDemand= building.gridDemandBeforeCom, mode= "EC", gridDemandEC= building.gridDemandAfterCom)
-                building.gridCompFeedInAfterCom = building.CalcGridFeedIn(gridFeedIn= building.gridFeedInBeforeCom, mode= "EC", gridFeedInEC= building.gridFeedInAfterCom)
-                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+                verbrauch += sum(building.demand)
+                erzeugung += sum(building.production)
+                eigenverbrauch += sum(building.selfConsumptionAfterCom)
+                netzbezug += sum(building.gridDemandAfterCom)
+                netzeinspeisung += sum(building.gridFeedInAfterCom)
 
                 if building.type == "Consumer":
                     ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
                 else:
-                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.CalcGridDemand(building.gridDemandAfterCom, mode= "EC")
+                    investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsAfterCom
                     ersparnisseProsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
-            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+            förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
             investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
-            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+            förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
 
         elif typ == "netMetering":
             for building in self.profiles:
-                building.CalcNetMetering(gridDemand= building.gridDemandBeforeCom, gridFeedIn= building.gridFeedInBeforeCom)
-                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+                verbrauch += sum(building.demand)
+                erzeugung += sum(building.production)
+                eigenverbrauch += sum(building.selfConsumptionAfterCom)
+                netzbezug += sum(building.gridDemandAfterCom)
+                netzeinspeisung += sum(building.gridFeedInAfterCom)
 
                 if building.type == "Consumer":
                     ersparnisseConsumer += 0
                 else:
-                    ersparnisseProsumer += building.gridCostsNetMetering + (building.gridFeedInNetMetering - building.gridCompFeedInBeforeCom)
-            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+                    investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsBeforeCom
+                    if ersparnisOhneMitPV < 0:
+                        print("")
+                    if building.gridFeedInNetMetering < 0:
+                        print("")
+                    ersparnisseProsumer += ersparnisOhneMitPV + building.gridFeedInNetMetering
+            förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
             investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
-            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+            förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
         
         elif typ == "sharedGeneration":
             for building in self.profiles:
-                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
+                verbrauch += sum(building.demand)
+                erzeugung += sum(building.production)
+                eigenverbrauch += sum(building.selfConsumptionAfterCom)
+                netzbezug += sum(building.gridDemandAfterCom)
+                netzeinspeisung += sum(building.gridFeedInAfterCom)
 
+                investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"]
                 if building.type == "Consumer":
-                    ersparnisseConsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom)
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsAfterCom
+                    ersparnisseConsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
                 else:
-                    ersparnisseProsumer += (building.gridCostsBeforeCom - building.gridCostsAfterCom) + (building.gridCompFeedInAfterCom - building.gridCompFeedInBeforeCom)
-            Förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsAfterCom
+                    ersparnisseProsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
+            förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
             investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
-            Förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
+            förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
             
         results = {
+            "Verbrauch" : verbrauch,
+            "Erzeugung" : erzeugung,
+            "Eigenverbrauch" : eigenverbrauch,
+            "Netzbezug" : netzbezug,
+            "Netzeinspeisung" : netzeinspeisung,
             "Investkosten" : investKosten,
             "Ersparnisse Prosumer" : ersparnisseProsumer,
             "Ersparnisse Consumer" : ersparnisseConsumer,
-            "Förderkosten" : Förderkosten,
+            "Förderkosten" : förderkosten,
             }
         
         return results
@@ -323,8 +358,8 @@ econParametersMain = {
     "antAbgabe" : [0.2, 0.2, 0.2],
     "antSteuer" : [0.2, 0.2, 0.2],
     "priceDemand" : [0.17 , 0.6, 0.3],
-    "priceFeedIn" : [0.085, 0.286, 0.11],    
-    "Kosten Photovoltaik" : [1300, 1800, 1500],
+    "priceFeedIn" : [0.05, 0.286, 0.11],    
+    "Kosten Photovoltaik" : [1600, 1900, 1800],
     "Kosten Stromspeicher" : [1000, 1500, 1300],
     "Förderrate Photovoltaik" : [0.3, 0.3, 0.4],
     "Förderrate Stromspeicher" : [0.2, 0.2, 0.3]
@@ -353,7 +388,7 @@ for szen in tqdm(range(3)):
             "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
             }
         profileSim = CreateProfiles(startConditions)
-        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 0, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 100, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
         sim.Simulate()
         results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
         data = data.append(results, ignore_index = True)
@@ -365,8 +400,8 @@ writer = pd.ExcelWriter("Wirtschaftliche_Bewertung.xlsx", engine='openpyxl')
 
 writer.book = book
 writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-data.to_excel(writer, sheet_name= "Wirtschaftliche_Bewertung", header= None,index=None,
-                     startcol= 2, startrow= 1)
+data.to_excel(writer, sheet_name= "Wirtschaftliche_Bewertung", header= True,index= True,
+                     startcol= 1, startrow= 0)
 writer.save()
 writer.close()
 
