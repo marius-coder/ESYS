@@ -68,6 +68,29 @@ class Simulation():
         self.selfConsumptionBeforeCom = np.zeros(35036)
         self.selfConsumptionAfterCom = np.zeros(35036)
         
+    def CalcBatteryEEG(self, residualDemandSum, timestep):
+        SumEnergytoAllocate = min(abs(self.battery.AvailableEnergy()),residualDemandSum)
+        toRet = 0
+        if SumEnergytoAllocate > 0:
+            for building in self.profiles:
+                allocatedEnergy = SumEnergytoAllocate / residualDemandSum * building.residualLoad[timestep]
+                toRet += allocatedEnergy
+                building.residualLoad[timestep] -= allocatedEnergy
+                building.gridDemandAfterCom[timestep] -= allocatedEnergy
+            return residualDemandSum - toRet
+
+    def CalcBatteryEEGladen(self, residualEnergySum, timestep):
+        SumEnergytoAllocate = min(abs(self.battery.AvailableSpace()),abs(residualEnergySum))
+        toRet = 0
+        if round(SumEnergytoAllocate,6) > 0:
+            for building in self.profiles:                
+                allocatedEnergy = abs(SumEnergytoAllocate / residualEnergySum * building.residualLoad[timestep])
+                toRet += allocatedEnergy
+
+                building.residualLoad[timestep] += allocatedEnergy
+                building.gridFeedInAfterCom[timestep] -= allocatedEnergy
+
+            return residualEnergySum - toRet
 
 
     def CalcEEG(self, timestep, residualProductionSum, residualDemandSum, checkResidualProdSum):
@@ -93,7 +116,7 @@ class Simulation():
                 #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
                 building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep]
                 building.gridDemandAfterCom[timestep] = building.gridDemandBeforeCom[timestep]
-                building.gridFeedInAfterCom[timestep] = abs(building.production[timestep] - building.selfConsumptionAfterCom[timestep]) - allocatedEnergy
+                building.gridFeedInAfterCom[timestep] = abs(building.residualLoad[timestep])
         return checkResidualProdSum
 
     def Simulate(self,verbose = False):
@@ -143,6 +166,7 @@ class Simulation():
             #Falls nach der direktzuweisung noch Energie übrig ist, wird der gemeinschaftsspeicher befüllt
             if residualProductionSum < 0:
                 residualProductionSum = abs(residualProductionSum)
+                self.CalcBatteryEEGladen(residualEnergySum= residualProductionSum, timestep= timestep)
                 #Batterie Laden
                 residualProductionSum = self.battery.Laden(qtoLoad= residualProductionSum, timestep= timestep)
                 #restliche Energie in das Netz einspeisen
@@ -150,6 +174,7 @@ class Simulation():
                  
             if round(residualDemandSum,6) > 0:
                 #Batterie entladen
+                self.CalcBatteryEEG(residualDemandSum= residualDemandSum, timestep= timestep)
                 residualDemandSum = self.battery.Entladen(qtoTake= residualDemandSum, timestep= timestep)
                 #restliche Energie aus dem Netz beziehen
                 self.gridDemand[timestep] = residualDemandSum
@@ -192,20 +217,20 @@ class Simulation():
             compAfter += building.gridCompFeedInAfterCom
             costsAfterNetMetering += building.gridCostsNetMetering
             compAfterNetMetering += building.gridFeedInNetMetering
-        print(f"==================================================================")
-        print(f"======== Effects of Energy Community ============")
-        print(f"Costs for Griddemand before Energy Community: {costsBefore}")
-        print(f"Costs for Griddemand after Energy Community: {costsAfter}")
-        print(f"Difference: {costsBefore-costsAfter}")
-        print(f"Compensation for GridFeedin before Energy Community: {compBefore}")
-        print(f"Compensation for GridFeedin after Energy Community: {compAfter}")
-        print(f"Difference: {compAfter-compBefore}")
-        print(f"Final Gain from Community: {(costsBefore-costsAfter)+(compAfter-compBefore)}")
-        print(f"==================================================================")
-        print(f"======== Effects of Net Metering ============")
+        #print(f"==================================================================")
+        #print(f"======== Effects of Energy Community ============")
+        #print(f"Costs for Griddemand before Energy Community: {costsBefore}")
+        #print(f"Costs for Griddemand after Energy Community: {costsAfter}")
+        #print(f"Difference: {costsBefore-costsAfter}")
+        #print(f"Compensation for GridFeedin before Energy Community: {compBefore}")
+        #print(f"Compensation for GridFeedin after Energy Community: {compAfter}")
+        #print(f"Difference: {compAfter-compBefore}")
+        #print(f"Final Gain from Community: {(costsBefore-costsAfter)+(compAfter-compBefore)}")
+        #print(f"==================================================================")
+        #print(f"======== Effects of Net Metering ============")
         
-        print(f"Gridcosts with Net Metering: {costsAfterNetMetering}")
-        print(f"Compensation with Net Metering: {compAfterNetMetering}")
+        #print(f"Gridcosts with Net Metering: {costsAfterNetMetering}")
+        #print(f"Compensation with Net Metering: {compAfterNetMetering}")
 
         return 
 
@@ -294,19 +319,15 @@ class Simulation():
             for building in self.profiles:
                 verbrauch += sum(building.demand)
                 erzeugung += sum(building.production)
-                eigenverbrauch += sum(building.selfConsumptionAfterCom)
-                netzbezug += sum(building.gridDemandAfterCom)
-                netzeinspeisung += sum(building.gridFeedInAfterCom)
+                eigenverbrauch += sum(building.selfConsumptionBeforeCom)
+                netzbezug += sum(building.gridDemandBeforeCom)
+                netzeinspeisung += sum(building.gridFeedInBeforeCom)
 
                 if building.type == "Consumer":
                     ersparnisseConsumer += 0
                 else:
                     investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"] 
                     ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsBeforeCom
-                    if ersparnisOhneMitPV < 0:
-                        print("")
-                    if building.gridFeedInNetMetering < 0:
-                        print("")
                     ersparnisseProsumer += ersparnisOhneMitPV + building.gridFeedInNetMetering
             förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
             investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
@@ -359,7 +380,7 @@ econParametersMain = {
     "antSteuer" : [0.2, 0.2, 0.2],
     "priceDemand" : [0.17 , 0.6, 0.3],
     "priceFeedIn" : [0.05, 0.286, 0.11],    
-    "Kosten Photovoltaik" : [1600, 1900, 1800],
+    "Kosten Photovoltaik" : [1300, 1800, 1500],
     "Kosten Stromspeicher" : [1000, 1500, 1300],
     "Förderrate Photovoltaik" : [0.3, 0.3, 0.4],
     "Förderrate Stromspeicher" : [0.2, 0.2, 0.3]
@@ -373,41 +394,91 @@ mainSzens = {
 
 
 data = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
-
-for szen in tqdm(range(3)):
-    for kostenSzen in range(3):        
-        econParameters = {
-            "antEnergie" : econParametersMain["antEnergie"][kostenSzen],
-            "antAbgabe" : econParametersMain["antAbgabe"][kostenSzen],
-            "antSteuer" : econParametersMain["antSteuer"][kostenSzen],
-            "priceDemand" : econParametersMain["priceDemand"][kostenSzen],
-            "priceFeedIn" : econParametersMain["priceFeedIn"][kostenSzen], 
-            "Kosten Photovoltaik" : econParametersMain["Kosten Photovoltaik"][kostenSzen],
-            "Kosten Stromspeicher" : econParametersMain["Kosten Stromspeicher"][kostenSzen],
-            "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
-            "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
-            }
-        profileSim = CreateProfiles(startConditions)
-        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 100, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
-        sim.Simulate()
-        results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
-        data = data.append(results, ignore_index = True)
-#data.to_csv("Wirtschaftliche_Bewertung.csv", sep=";", decimal = ",", encoding= "cp1252")
-
-
-book = load_workbook("Wirtschaftliche_Bewertung.xlsx")
-writer = pd.ExcelWriter("Wirtschaftliche_Bewertung.xlsx", engine='openpyxl')
-
-writer.book = book
-writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
-data.to_excel(writer, sheet_name= "Wirtschaftliche_Bewertung", header= True,index= True,
-                     startcol= 1, startrow= 0)
-writer.save()
-writer.close()
+if True:
+    for szen in tqdm(range(3)):
+        for kostenSzen in range(3):        
+            econParameters = {
+                "antEnergie" : econParametersMain["antEnergie"][kostenSzen],
+                "antAbgabe" : econParametersMain["antAbgabe"][kostenSzen],
+                "antSteuer" : econParametersMain["antSteuer"][kostenSzen],
+                "priceDemand" : econParametersMain["priceDemand"][kostenSzen],
+                "priceFeedIn" : econParametersMain["priceFeedIn"][kostenSzen], 
+                "Kosten Photovoltaik" : econParametersMain["Kosten Photovoltaik"][kostenSzen],
+                "Kosten Stromspeicher" : econParametersMain["Kosten Stromspeicher"][kostenSzen],
+                "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
+                "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
+                }
+            profileSim = CreateProfiles(startConditions)
+            sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 100, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+            sim.Simulate()
+            results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
+            data = data.append(results, ignore_index = True)
+    #data.to_csv("Wirtschaftliche_Bewertung.csv", sep=";", decimal = ",", encoding= "cp1252")
 
 
+    book = load_workbook("Wirtschaftliche_Bewertung.xlsx")
+    writer = pd.ExcelWriter("Wirtschaftliche_Bewertung.xlsx", engine='openpyxl')
+
+    writer.book = book
+    writer.sheets = dict((ws.title, ws) for ws in book.worksheets)
+    data.to_excel(writer, sheet_name= "Wirtschaftliche_Bewertung", header= True,index= True,
+                         startcol= 1, startrow= 0)
+    data.to_csv("Wirtschaftliche_Bewertung.csv", sep=";", decimal=",", encoding="cp1252")
+    writer.save()
+    writer.close()
 
 
+if False:
+    for szen in tqdm(range(3)):
+        for kostenSzen in range(3): 
+
+            econParameters = {
+                "antEnergie" : econParametersMain["antEnergie"][kostenSzen],
+                "antAbgabe" : econParametersMain["antAbgabe"][kostenSzen],
+                "antSteuer" : econParametersMain["antSteuer"][kostenSzen],
+                "priceDemand" : econParametersMain["priceDemand"][kostenSzen],
+                "priceFeedIn" : econParametersMain["priceFeedIn"][kostenSzen], 
+                "Kosten Photovoltaik" : econParametersMain["Kosten Photovoltaik"][kostenSzen],
+                "Kosten Stromspeicher" : econParametersMain["Kosten Stromspeicher"][kostenSzen],
+                "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
+                "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
+                }
+            if szen == 0:
+                #Net-Metering
+                dataNet = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
+            
+                profileSim = CreateProfiles(startConditions)
+                sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= 0, sharedGenerationkWp= 0, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+                sim.Simulate()
+                results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
+                dataNet = dataNet.append(results, ignore_index = True)
+                dataNet.to_csv(f"./Output/Ergebnis_NetMetering_{kostenSzen}.csv", sep= ";", decimal= ",", encoding= "cp1252")
+
+            if szen == 1:
+                #Peer-to-Peer
+                dataPeer = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
+                for batGröße in np.linspace(0,1000,11):
+                    profileSim = CreateProfiles(startConditions)
+                    sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= batGröße, sharedGenerationkWp= 0, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+                    sim.Simulate()
+                    results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
+                    dataPeer = dataPeer.append(results, ignore_index = True)
+                dataPeer.to_csv(f"./Output/Ergebnis_PeertpPeer_{kostenSzen}.csv", sep= ";", decimal= ",", encoding= "cp1252")
+
+            if szen == 2:
+                #Shared Generation
+                dataShared = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])    
+                for batGröße in np.linspace(0,1000,11):
+                    print(batGröße)
+                    for sharedGröße in np.linspace(0,500,11):
+                        profileSim = CreateProfiles(startConditions)
+                        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= batGröße, sharedGenerationkWp= sharedGröße, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+                        sim.Simulate()
+                        results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
+                        dataShared = dataShared.append(results, ignore_index = True)        
+                dataShared.to_csv(f"./Output/Ergebnis_SharedGen_{kostenSzen}.csv", sep= ";", decimal= ",", encoding= "cp1252")     
+
+        
 
 
 

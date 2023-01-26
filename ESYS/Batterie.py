@@ -16,6 +16,12 @@ class Batterie():
         self.entladeEnergie = np.zeros(infoAmount)
         self.verluste = np.zeros(infoAmount)
         
+    def AvailableEnergy(self):
+        return (self.kapazität - self.minLadung) * self.effizienz
+
+    def AvailableSpace(self):
+        return (self.kapazitätMAX - self.kapazität) * self.effizienz
+
     def Entladen(self, qtoTake, timestep):
         """Entladet die Batterie mit einer gegebenen Ladung
         qtoTake: float,  
