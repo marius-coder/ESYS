@@ -16,7 +16,7 @@ from openpyxl import load_workbook
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.colors import LightSource
 import seaborn as sns
-SharedData = pd.read_csv("./Output/Ergebnis_SharedGen_0.csv", sep=";", decimal =",", encoding = "cp1252")
+SharedData = pd.read_csv("./Output/Ergebnis_SharedGen_2.csv", sep=";", decimal =",", encoding = "cp1252")
 SharedData = SharedData.iloc[1:]
 SharedData = SharedData.reset_index(drop=True)
 batGröße = np.linspace(0,1000,11)
@@ -120,8 +120,8 @@ plt.savefig(f"./Output/Amortisation_3D.png", bbox_inches='tight')
 plt.show()
 
 sns.heatmap(dataAmort, cmap="gist_earth", cbar_kws={'label': "Amortisation in Jahren"})
-plt.ylabel("Größe des Stromspeichers in kWh")
-plt.xlabel("Größe der shared Generation in kWp")
+plt.xlabel("Größe des Stromspeichers in kWh")
+plt.ylabel("Größe der shared Generation in kWp")
 plt.title("Amortisationszeit")
 plt.savefig(f"./Output/Amortisation_2D.png", bbox_inches='tight')
 plt.show()
@@ -158,8 +158,8 @@ plt.savefig(f"./Output/Ersparnisse_Gesamt_3D.png", bbox_inches='tight')
 plt.show()
 
 sns.heatmap(dataErsp, cmap="gist_earth", cbar_kws={'label': "Ersparnisse in €"})
-plt.ylabel("Größe des Stromspeichers in kWh")
-plt.xlabel("Größe der shared Generation in kWp")
+plt.xlabel("Größe des Stromspeichers in kWh")
+plt.ylabel("Größe der shared Generation in kWp")
 plt.title("Ersparnisse Gesamt")
 plt.savefig(f"./Output/Ersparnisse_Gesamt_2D.png", bbox_inches='tight')
 plt.show()

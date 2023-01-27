@@ -333,17 +333,17 @@ class Simulation():
             for building in self.profiles:
                 verbrauch += sum(building.demand)
                 erzeugung += sum(building.production)
-                eigenverbrauch += sum(building.selfConsumptionAfterCom)
-                netzbezug += sum(building.gridDemandAfterCom)
-                netzeinspeisung += sum(building.gridFeedInAfterCom)
+                eigenverbrauch += sum(building.selfConsumptionBeforeCom)
+                netzbezug += sum(building.gridDemandBeforeCom)
+                netzeinspeisung += sum(building.gridFeedInBeforeCom)
 
                 investKosten += sum(building.production) / kWhperkWp * self.econParameters["Kosten Photovoltaik"]
                 if building.type == "Consumer":
-                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsAfterCom
-                    ersparnisseConsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsBeforeCom
+                    ersparnisseConsumer += ersparnisOhneMitPV + building.gridCompFeedInBeforeCom
                 else:
-                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsAfterCom
-                    ersparnisseProsumer += ersparnisOhneMitPV + building.gridCompFeedInAfterCom
+                    ersparnisOhneMitPV = building.CalcGridDemand(building.demand, mode= "Normal") - building.gridCostsBeforeCom
+                    ersparnisseProsumer += ersparnisOhneMitPV + building.gridCompFeedInBeforeCom
             förderkosten += investKosten * self.econParameters["Förderrate Photovoltaik"] 
             investKosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] 
             förderkosten += self.battery.kapazitätMAX * self.econParameters["Kosten Stromspeicher"] * self.econParameters["Förderrate Stromspeicher"]
@@ -384,7 +384,7 @@ econParametersMain = {
 
 mainSzens = {
     "netMetering" : [True, False, False],
-    "Peer-to-Peer" : [True, True, True],
+    "Peer-to-Peer" : [True, True, False],
     "sharedGeneration" : [False, False, True],    
     }
 
@@ -424,7 +424,7 @@ if False:
     writer.close()
 
 
-if True:
+if False:
     for szen in tqdm(range(3)):
         for kostenSzen in range(3): 
 
@@ -439,7 +439,7 @@ if True:
                 "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][kostenSzen],
                 "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][kostenSzen],
                 }
-            if szen == 0:
+            if szen == 4:
                 #Net-Metering
                 dataNet = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
             
@@ -450,7 +450,7 @@ if True:
                 dataNet = dataNet.append(results, ignore_index = True)
                 dataNet.to_csv(f"./Output/Ergebnis_NetMetering_{kostenSzen}.csv", sep= ";", decimal= ",", encoding= "cp1252")
 
-            if szen == 1:
+            if szen == 4:
                 #Peer-to-Peer
                 dataPeer = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
                 for batGröße in np.linspace(0,1000,11):
@@ -468,15 +468,36 @@ if True:
                     print(batGröße)
                     for sharedGröße in np.linspace(0,500,11):
                         profileSim = CreateProfiles(startConditions)
-                        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= batGröße, sharedGenerationkWp= sharedGröße, peerToPeer= mainSzens["Peer-to-Peer"][szen], netMetering= mainSzens["netMetering"][szen], sharedGeneration=mainSzens["sharedGeneration"][szen])
+                        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= batGröße, sharedGenerationkWp= sharedGröße, peerToPeer= mainSzens["Peer-to-Peer"][2], netMetering= mainSzens["netMetering"][2], sharedGeneration=mainSzens["sharedGeneration"][2])
                         sim.Simulate()
-                        results = sim.ExportResults(typ= list(mainSzens.keys())[szen])
+                        results = sim.ExportResults(typ= list(mainSzens.keys())[2])
                         dataShared = dataShared.append(results, ignore_index = True)        
                 dataShared.to_csv(f"./Output/Ergebnis_SharedGen_{kostenSzen}.csv", sep= ";", decimal= ",", encoding= "cp1252")     
 
-        
 
+econParameters = {
+    "antEnergie" : econParametersMain["antEnergie"][2],
+    "antAbgabe" : econParametersMain["antAbgabe"][2],
+    "antSteuer" : econParametersMain["antSteuer"][2],
+    "priceDemand" : econParametersMain["priceDemand"][2],
+    "priceFeedIn" : econParametersMain["priceFeedIn"][2], 
+    "Kosten Photovoltaik" : econParametersMain["Kosten Photovoltaik"][2],
+    "Kosten Stromspeicher" : econParametersMain["Kosten Stromspeicher"][2],
+    "Förderrate Photovoltaik" : econParametersMain["Förderrate Photovoltaik"][2],
+    "Förderrate Stromspeicher" : econParametersMain["Förderrate Stromspeicher"][2],
+    }        
 
+#Shared Generation
+dataShared = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])    
+for batGröße in np.linspace(0,1000,11):
+    print(batGröße)
+    for sharedGröße in np.linspace(0,500,11):
+        profileSim = CreateProfiles(startConditions)
+        sim = Simulation(profileSim,econParameters= econParameters, var_kapMAX= batGröße, sharedGenerationkWp= sharedGröße, peerToPeer= mainSzens["Peer-to-Peer"][2], netMetering= mainSzens["netMetering"][2], sharedGeneration=mainSzens["sharedGeneration"][2])
+        sim.Simulate()
+        results = sim.ExportResults(typ= list(mainSzens.keys())[2])
+        dataShared = dataShared.append(results, ignore_index = True)        
+dataShared.to_csv(f"./Output/Ergebnis_SharedGen_2.csv", sep= ";", decimal= ",", encoding= "cp1252")     
 
 
 
