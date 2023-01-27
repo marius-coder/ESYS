@@ -56,8 +56,7 @@ class Simulation():
 
         delta = (len(inp)-1) / (new_len-1)
         outp = [interpolate(inp, i*delta) for i in range(new_len)]
-        self.sharedGenerationProfile = [value * sharedGenerationkWp for value in outp]
-
+        self.sharedGenerationProfile = [value * sharedGenerationkWp /4 for value in outp]
         self.gridDemand = np.zeros(35036)
         self.gridFeedIn = np.zeros(35036)
         self.peerToPeer = peerToPeer
@@ -102,18 +101,15 @@ class Simulation():
                 building.residualLoad[timestep] -= allocatedEnergy
                 checkResidualProdSum += allocatedEnergy
                 #Daten loggen                
-                #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
-                building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep] #Eigenverbrauch nach E-Gemeinschaft
-                building.gridDemandAfterCom[timestep] = building.demand[timestep] - (building.selfConsumptionAfterCom[timestep] + allocatedEnergy) #Netzbezug nach E-Gemeinschaft
-                building.gridFeedInAfterCom[timestep] = building.gridFeedInBeforeCom[timestep] #Netzeinspeisung nach E-Gemeinschaft   
+                building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep] + allocatedEnergy #Eigenverbrauch nach E-Gemeinschaft
+                building.gridDemandAfterCom[timestep] =  building.gridDemandBeforeCom[timestep] - allocatedEnergy #Netzbezug nach E-Gemeinschaft
+                building.gridFeedInAfterCom[timestep] = building.gridFeedInBeforeCom[timestep] - allocatedEnergy #Netzeinspeisung nach E-Gemeinschaft   
                 
             elif building.residualLoad[timestep] < 0:
                 #Residuallast dynamisch aufteilen
                 allocatedEnergy = abs(SumEnergytoAllocate / residualProductionSum * building.residualLoad[timestep])
                 building.residualLoad[timestep] -= allocatedEnergy
-                #checkResidualProdSum += allocatedEnergy
                 #Daten loggen
-                #demand = building.demand[timestep] + building.demandEV[timestep] + building.demandHP[timestep]
                 building.selfConsumptionAfterCom[timestep] = building.selfConsumptionBeforeCom[timestep]
                 building.gridDemandAfterCom[timestep] = building.gridDemandBeforeCom[timestep]
                 building.gridFeedInAfterCom[timestep] = abs(building.residualLoad[timestep])
@@ -357,7 +353,7 @@ class Simulation():
             "Erzeugung" : erzeugung,
             "Eigenverbrauch" : eigenverbrauch,
             "Netzbezug" : netzbezug,
-            "Netzeinspeisung" : netzeinspeisung,
+            "Netzeinspeisung" : erzeugung-eigenverbrauch,
             "Investkosten" : investKosten,
             "Ersparnisse Prosumer" : ersparnisseProsumer,
             "Ersparnisse Consumer" : ersparnisseConsumer,
@@ -375,13 +371,13 @@ profileSim = CreateProfiles(startConditions)
 #print(sim.ExportResults())
 
 econParametersMain = {
-    "antEnergie" : [0.6, 0.6, 0.6],
-    "antAbgabe" : [0.2, 0.2, 0.2],
-    "antSteuer" : [0.2, 0.2, 0.2],
+    "antEnergie" : [0.5, 0.5, 0.5],
+    "antAbgabe" : [0.25, 0.25, 0.25],
+    "antSteuer" : [0.25, 0.25, 0.25],
     "priceDemand" : [0.17 , 0.6, 0.3],
     "priceFeedIn" : [0.05, 0.286, 0.11],    
-    "Kosten Photovoltaik" : [1300, 1800, 1500],
-    "Kosten Stromspeicher" : [1000, 1500, 1300],
+    "Kosten Photovoltaik" : [1300*1.2, 1800*1.2, 1500*1.2],
+    "Kosten Stromspeicher" : [1000*1.2, 1500*1.2, 1300*1.2],
     "Förderrate Photovoltaik" : [0.3, 0.3, 0.4],
     "Förderrate Stromspeicher" : [0.2, 0.2, 0.3]
     }
@@ -394,7 +390,7 @@ mainSzens = {
 
 
 data = pd.DataFrame({"Investkosten" : np.nan, "Ersparnisse Prosumer" : np.nan, "Ersparnisse Consumer" : np.nan, "Förderkosten" : np.nan}, index = [0])
-if True:
+if False:
     for szen in tqdm(range(3)):
         for kostenSzen in range(3):        
             econParameters = {
@@ -428,7 +424,7 @@ if True:
     writer.close()
 
 
-if False:
+if True:
     for szen in tqdm(range(3)):
         for kostenSzen in range(3): 
 

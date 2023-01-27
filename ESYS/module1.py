@@ -16,7 +16,7 @@ from openpyxl import load_workbook
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.colors import LightSource
 import seaborn as sns
-SharedData = pd.read_csv("./Output/Ergebnis_SharedGen_1.csv", sep=";", decimal =",", encoding = "cp1252")
+SharedData = pd.read_csv("./Output/Ergebnis_SharedGen_0.csv", sep=";", decimal =",", encoding = "cp1252")
 SharedData = SharedData.iloc[1:]
 SharedData = SharedData.reset_index(drop=True)
 batGröße = np.linspace(0,1000,11)
